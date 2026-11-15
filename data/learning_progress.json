@@ -1,0 +1,26 @@
+{
+  "completed": [],
+  "streak": 1,
+  "last_day": "2026-11-15",
+  "xp": 30,
+  "quiz_history": [
+    {
+      "date": "2026-11-15T01:58",
+      "topic": "All topics",
+      "correct": 3,
+      "total": 10,
+      "percent": 30,
+      "mode": "Practice"
+    }
+  ],
+  "best_scores": {
+    "All topics": 30
+  },
+  "mastery": {
+    "All topics": 10.5
+  },
+  "badges": [],
+  "daily_activity": {
+    "2026-11-15": 30
+  }
+}
