@@ -2,7 +2,7 @@
 
 **Track:** Finance
 
-**Team:** [Insert team members' names]
+**Team:** Joshua, Jason, Zach
 
 ## The Problem
 
