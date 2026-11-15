@@ -1,55 +1,1271 @@
 #Hackathon
-Common Cents – Personal Money Coach (Insights Page)
-The Insights Page in Common Cents is designed to act as a personal money coach, helping users understand their financial situation, manage their spending, track savings goals, and make smarter decisions about their money. It brings all important financial information together in one place and provides personalized suggestions based on the user's income, expenses, savings, transactions, and wishlist.
 
-The page includes several important features:
-1. Money Overview
-This section provides a quick summary of the user's financial situation. It displays four key measurements:
-- Available Money: The amount of money remaining after purchases and savings contributions.
-- Total Money: The user's overall recorded balance.
-- Total Savings: The amount of money currently saved.
-- Total Expenses: The total amount spent.
-This overview helps users understand how much money they have and how they are managing it.
-2. Savings Goals
-This section allows users to monitor their progress toward their financial goals. It displays the total amount they want to save, how much they have already saved, and how much they still need.
+   
+import sqlite3
+from pathlib import Path
+from datetime import date
 
-Each savings goal has its own progress bar and personalized message depending on how close the user is to reaching the target. This encourages users to stay motivated, continue saving, and work toward achieving their financial goals.
-3. Wishlist
-The Wishlist section helps users plan future purchases without spending money impulsively. It displays all the items users want to buy, their prices, and whether they can currently afford them based on their available balance.
+import pandas as pd
+import plotly.express as px
+import streamlit as st
 
-Items that fit the available balance are marked as affordable, while items that cost more show how much additional money is needed. It also reminds users to consider their savings goals before making purchases.
-4. Spending Analysis
-This section helps users understand where their money goes by analyzing their recorded expenses.
+# ==========================================
+# COMMON CENTS - PERSONAL FINANCE APP
+# ==========================================
 
-It includes two visual charts:
-- Spending by Category: A pie chart showing how expenses are divided among different spending categories.
-- Monthly Spending: A bar chart showing how much money the user spends each month.
-It also identifies the user's biggest spending category and provides suggestions for reviewing expenses and finding opportunities to reduce unnecessary spending.
-5. Personalized Financial Advice
-This section provides recommendations based on the user's financial activity and current situation.
+DB_PATH = Path(__file__).parent / "common_cents.db"
 
-The advice can include:
-- Reviewing savings contributions if available money becomes negative.
-- Protecting the remaining balance when available money is low.
-- Planning how to divide available money between spending and saving.
-- Focusing on unfinished savings goals.
-- Creating new savings goals.
-- Thinking carefully before purchasing wishlist items.
-- Reviewing spending when expenses are higher than income.
-These recommendations help users become more aware of their financial habits and make more responsible decisions.
-6. Future Savings Calculator
-The Future Savings Calculator allows users to experiment with different savings amounts and time periods to estimate how much they could save in the future.
+st.set_page_config(
+    page_title="Common Cents",
+    page_icon="🪙",
+    layout="wide"
+)
 
-Users can adjust two sliders:
-- Weekly Savings: How much money they plan to save each week.
-- Number of Weeks: How long they plan to continue saving.
-The calculator automatically estimates additional savings and combines that amount with current savings to show possible future savings. If the user has an unfinished savings goal, it can also estimate approximately how many weeks it would take to reach that goal.
+# ==========================================
+# DESIGN
+# ==========================================
 
-This feature helps users create realistic savings plans and understand how small, consistent contributions can add up over time.
-7. Educational Financial Guidance
-At the bottom of the page, Common Cents reminds users that its recommendations are educational suggestions. The purpose is to help users understand their finances and explore better money-management habits while allowing them to make their own financial decisions.
+st.markdown("""
+<style>
+.stApp {
+    background: linear-gradient(135deg, #07152f, #102c61, #164b91);
+    color: white;
+}
+[data-testid="stSidebar"] {
+    background-color: #081a38;
+}
+h1, h2, h3 {
+    color: white;
+}
+div[data-testid="stMetric"] {
+    background: rgba(255,255,255,0.09);
+    padding: 15px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.12);
+}
+.stButton button, .stFormSubmitButton button {
+    background-color: #e6b84c;
+    color: #10213d;
+    font-weight: bold;
+    border-radius: 10px;
+    border: none;
+}
+.stButton button:hover, .stFormSubmitButton button:hover {
+    background-color: #f4cf72;
+    color: #10213d;
+}
+.coin {
+    display: inline-flex;
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    background: linear-gradient(145deg,#ffe18a,#c58b19);
+    color: #152747;
+    align-items: center;
+    justify-content: center;
+    font-size: 25px;
+    font-weight: 900;
+    border: 3px solid #fff0b5;
+}
+</style>
+""", unsafe_allow_html=True)
 
-Overall Purpose
-The main purpose of the Common Cents Insights Page is to make money management easier, more understandable, and more engaging. Instead of simply showing numbers, it transforms financial information into useful insights, progress updates, charts, and personalized recommendations.
 
-By combining money tracking, savings goals, wishlist planning, spending analysis, financial advice, and a future savings calculator, the Insights Page encourages users to develop healthy financial habits, avoid unnecessary spending, save consistently, and become more confident in managing their money.
+# ==========================================
+# DATABASE
+# ==========================================
+
+def connect():
+    return sqlite3.connect(DB_PATH)
+
+
+def setup_database():
+    with connect() as con:
+
+        con.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY CHECK(id=1),
+            starting_balance REAL DEFAULT 0
+        )
+        """)
+
+        con.execute("""
+        INSERT OR IGNORE INTO settings(id, starting_balance)
+        VALUES(1, 0)
+        """)
+
+        con.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT,
+            name TEXT,
+            category TEXT,
+            amount REAL,
+            tx_date TEXT,
+            note TEXT
+        )
+        """)
+
+        con.execute("""
+        CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            target REAL,
+            created TEXT
+        )
+        """)
+
+        con.execute("""
+        CREATE TABLE IF NOT EXISTS contributions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            goal_id INTEGER,
+            amount REAL,
+            saved_date TEXT
+        )
+        """)
+
+        con.execute("""
+        CREATE TABLE IF NOT EXISTS wishlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            price REAL,
+            category TEXT,
+            priority TEXT,
+            added TEXT
+        )
+        """)
+
+
+setup_database()
+
+
+def query_df(sql, params=()):
+    with connect() as con:
+        return pd.read_sql_query(sql, con, params=params)
+
+
+def get_starting_balance():
+    result = query_df(
+        "SELECT starting_balance FROM settings WHERE id=1"
+    )
+    return float(result.iloc[0, 0])
+
+
+def save_starting_balance(amount):
+    with connect() as con:
+        con.execute(
+            "UPDATE settings SET starting_balance=? WHERE id=1",
+            (float(amount),)
+        )
+
+
+def add_transaction(kind, name, category, amount, tx_date, note=""):
+    with connect() as con:
+        con.execute("""
+        INSERT INTO transactions
+        (kind, name, category, amount, tx_date, note)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            kind, name, category, float(amount),
+            str(tx_date), note
+        ))
+
+
+def get_goals():
+    return query_df("""
+        SELECT
+            g.id,
+            g.name,
+            g.target,
+            COALESCE(SUM(c.amount), 0) AS saved
+        FROM goals g
+        LEFT JOIN contributions c ON g.id = c.goal_id
+        GROUP BY g.id
+        ORDER BY g.id DESC
+    """)
+
+
+def get_totals():
+    tx = query_df("""
+        SELECT kind, SUM(amount) AS total
+        FROM transactions
+        GROUP BY kind
+    """)
+
+    income = 0
+    expenses = 0
+
+    if not tx.empty:
+        for _, row in tx.iterrows():
+            if row["kind"] == "Income":
+                income = float(row["total"] or 0)
+            elif row["kind"] == "Expense":
+                expenses = float(row["total"] or 0)
+
+    goals = get_goals()
+    savings = float(goals["saved"].sum()) if not goals.empty else 0
+
+    total_money = get_starting_balance() + income - expenses
+    available = total_money - savings
+
+    return income, expenses, savings, total_money, available
+
+
+def money(amount):
+    return f"${float(amount):,.2f}"
+
+
+# ==========================================
+# SIDEBAR
+# ==========================================
+
+with st.sidebar:
+
+    st.markdown(
+        '<span class="coin">¢</span> '
+        '<span style="font-size:25px;font-weight:800;">Common Cents</span>',
+        unsafe_allow_html=True
+    )
+
+    st.caption("Make every cent count.")
+
+    page = st.radio(
+        "Navigation",
+        [
+            "Dashboard",
+            "Transactions",
+            "Savings Goals",
+            "Wishlist",
+            "Insights",
+            "Quiz",
+            "Learning Center",
+            "Settings"
+        ]
+    )
+
+    income, expenses, savings, total, available = get_totals()
+
+    st.divider()
+    st.metric("Available Money", money(available))
+
+
+# ==========================================
+# DASHBOARD
+# ==========================================
+
+if page == "Dashboard":
+
+    st.title("Welcome to Common Cents!")
+    st.write("Your money, your goals, your future.")
+
+    income, expenses, savings, total, available = get_totals()
+
+    a, b, c, d = st.columns(4)
+
+    a.metric("Available Balance", money(available))
+    b.metric("Total Money", money(total))
+    c.metric("Savings", money(savings))
+    d.metric("Expenses", money(expenses))
+
+    st.info(
+        "Your available balance is your total money minus money "
+        "you have already assigned to savings goals."
+    )
+
+    st.subheader("Your Savings Goals")
+
+    goals = get_goals()
+
+    if goals.empty:
+        st.write("You haven't created any goals yet.")
+    else:
+        for _, goal in goals.iterrows():
+
+            progress = min(
+                float(goal["saved"]) / float(goal["target"]), 1
+            )
+
+            st.write(
+                f"**{goal['name']}** — "
+                f"{money(goal['saved'])} / {money(goal['target'])}"
+            )
+
+            st.progress(progress)
+
+    st.subheader("Recent Activity")
+
+    recent = query_df("""
+        SELECT tx_date, kind, name, category, amount
+        FROM transactions
+        ORDER BY id DESC LIMIT 5
+    """)
+
+    if recent.empty:
+        st.write("Your activity will appear here.")
+    else:
+        st.dataframe(recent, use_container_width=True, hide_index=True)
+
+    st.subheader("Quick Purchase")
+
+    with st.form("quick_purchase"):
+
+        item = st.text_input("What did you buy?")
+        price = st.number_input(
+            "Price ($)", min_value=0.01, value=5.00
+        )
+
+        category = st.selectbox(
+            "Category",
+            [
+                "Food", "Shopping", "Entertainment",
+                "Transportation", "School", "Personal", "Other"
+            ]
+        )
+
+        if st.form_submit_button("Record Purchase"):
+
+            if item.strip():
+
+                add_transaction(
+                    "Expense", item, category,
+                    price, date.today()
+                )
+
+                st.success("Purchase recorded!")
+                st.rerun()
+
+            else:
+                st.error("Enter an item name.")
+
+
+# ==========================================
+# TRANSACTIONS
+# ==========================================
+
+elif page == "Transactions":
+
+    st.title("Transactions")
+    st.write("Track money coming in and going out.")
+
+    with st.form("transaction_form"):
+
+        kind = st.radio(
+            "Transaction Type",
+            ["Expense", "Income"],
+            horizontal=True
+        )
+
+        name = st.text_input("Description")
+
+        category = st.selectbox(
+            "Category",
+            [
+                "Food", "Shopping", "Entertainment",
+                "Transportation", "School", "Personal",
+                "Allowance", "Gift", "Work", "Other"
+            ]
+        )
+
+        amount = st.number_input(
+            "Amount ($)", min_value=0.01, value=10.00
+        )
+
+        tx_date = st.date_input("Date", value=date.today())
+        note = st.text_input("Optional note")
+
+        if st.form_submit_button("Save Transaction"):
+
+            if name.strip():
+
+                add_transaction(
+                    kind, name, category,
+                    amount, tx_date, note
+                )
+
+                st.success("Transaction saved!")
+                st.rerun()
+
+            else:
+                st.error("Enter a description.")
+
+    st.divider()
+
+    transactions = query_df("""
+        SELECT id, tx_date, kind, name, category, amount, note
+        FROM transactions
+        ORDER BY tx_date DESC, id DESC
+    """)
+
+    if transactions.empty:
+        st.info("No transactions yet.")
+    else:
+
+        st.dataframe(
+            transactions.drop(columns=["id"]),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        with st.expander("Delete a transaction"):
+
+            selected = st.selectbox(
+                "Choose transaction ID",
+                transactions["id"].tolist()
+            )
+
+            if st.button("Delete Transaction"):
+
+                with connect() as con:
+                    con.execute(
+                        "DELETE FROM transactions WHERE id=?",
+                        (int(selected),)
+                    )
+
+                st.success("Transaction deleted.")
+                st.rerun()
+
+
+# ==========================================
+# SAVINGS GOALS
+# ==========================================
+
+elif page == "Savings Goals":
+
+    st.title("Savings Goals")
+    st.write("Create goals and build your savings.")
+
+    with st.form("goal_form"):
+
+        name = st.text_input("Goal Name")
+
+        target = st.number_input(
+            "Target Amount ($)",
+            min_value=1.0,
+            value=100.0
+        )
+
+        if st.form_submit_button("Create Goal"):
+
+            if name.strip():
+
+                with connect() as con:
+                    con.execute("""
+                        INSERT INTO goals(name, target, created)
+                        VALUES (?, ?, ?)
+                    """, (name, target, str(date.today())))
+
+                st.success("Goal created!")
+                st.rerun()
+
+            else:
+                st.error("Enter a goal name.")
+
+    st.divider()
+
+    goals = get_goals()
+
+    if goals.empty:
+        st.info("Create your first savings goal.")
+    else:
+
+        for _, goal in goals.iterrows():
+
+            st.subheader(goal["name"])
+
+            target = float(goal["target"])
+            saved = float(goal["saved"])
+            remaining = max(target - saved, 0)
+
+            st.write(
+                f"{money(saved)} saved out of {money(target)}"
+            )
+
+            st.progress(min(saved / target, 1))
+
+            st.caption(
+                f"{money(remaining)} remaining"
+            )
+
+            with st.form(f"contribute_{int(goal['id'])}"):
+
+                current_income, current_expenses, current_savings, current_total, current_available = get_totals()
+
+                amount = st.number_input(
+                    "Amount to add to this goal ($)",
+                    min_value=0.01,
+                    max_value=max(current_available, 0.01),
+                    value=min(5.0, max(current_available, 0.01)),
+                    key=f"goal_amount_{int(goal['id'])}",
+                    disabled=current_available < 0.01
+                )
+
+                if st.form_submit_button(
+                    "Add Savings",
+                    disabled=current_available < 0.01
+                ):
+
+                    if amount <= current_available:
+
+                        with connect() as con:
+                            con.execute("""
+                                INSERT INTO contributions
+                                (goal_id, amount, saved_date)
+                                VALUES (?, ?, ?)
+                            """, (
+                                int(goal["id"]),
+                                amount,
+                                str(date.today())
+                            ))
+
+                        st.success("Savings added!")
+                        st.rerun()
+
+                    else:
+                        st.error("Not enough available money.")
+
+            st.divider()
+
+
+# ==========================================
+# WISHLIST
+# ==========================================
+
+elif page == "Wishlist":
+
+    st.title("Your Wishlist")
+    st.write("Keep track of things you want to buy.")
+
+    with st.form("wishlist_form"):
+
+        name = st.text_input("Item Name")
+
+        price = st.number_input(
+            "Estimated Price ($)",
+            min_value=0.01,
+            value=30.00
+        )
+
+        category = st.selectbox(
+            "Category",
+            [
+                "Technology", "Clothing", "Games",
+                "Books", "Hobbies", "Other"
+            ]
+        )
+
+        priority = st.selectbox(
+            "Priority",
+            ["High", "Medium", "Low"]
+        )
+
+        if st.form_submit_button("Add to Wishlist"):
+
+            if name.strip():
+
+                with connect() as con:
+                    con.execute("""
+                        INSERT INTO wishlist
+                        (name, price, category, priority, added)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (
+                        name, price, category,
+                        priority, str(date.today())
+                    ))
+
+                st.success("Added to wishlist!")
+                st.rerun()
+
+            else:
+                st.error("Enter an item name.")
+
+    st.divider()
+
+    wishlist = query_df("SELECT * FROM wishlist ORDER BY id DESC")
+
+    if wishlist.empty:
+        st.info("Your wishlist is empty.")
+    else:
+
+        for _, item in wishlist.iterrows():
+
+            _, _, _, _, available = get_totals()
+
+            st.markdown(f"### {item['name']}")
+            st.write(
+                f"Price: {money(item['price'])} | "
+                f"Priority: {item['priority']}"
+            )
+
+            if available >= float(item["price"]):
+                st.success("You can afford this item.")
+            else:
+                st.warning(
+                    f"You need "
+                    f"{money(float(item['price']) - available)} more."
+                )
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                if st.button(
+                    "Buy",
+                    key=f"buy_{int(item['id'])}",
+                    disabled=available < float(item["price"])
+                ):
+
+                    add_transaction(
+                        "Expense",
+                        item["name"],
+                        item["category"],
+                        float(item["price"]),
+                        date.today(),
+                        "Bought from wishlist"
+                    )
+
+                    with connect() as con:
+                        con.execute(
+                            "DELETE FROM wishlist WHERE id=?",
+                            (int(item["id"]),)
+                        )
+
+                    st.success("Purchase recorded!")
+                    st.rerun()
+
+            with col2:
+
+                if st.button(
+                    "Remove",
+                    key=f"remove_{int(item['id'])}"
+                ):
+
+                    with connect() as con:
+                        con.execute(
+                            "DELETE FROM wishlist WHERE id=?",
+                            (int(item["id"]),)
+                        )
+
+                    st.rerun()
+
+            st.divider()
+
+
+# ==========================================
+# INSIGHTS - PERSONAL MONEY COACH
+# ==========================================
+
+elif page == "Insights":
+
+    st.title("Your Personal Money Coach")
+
+    st.write(
+        "Understand your money, track your progress, "
+        "and get ideas about what to do next."
+    )
+
+    income, expenses, savings, total, available = get_totals()
+
+    goals = get_goals()
+
+    wishlist = query_df(
+        "SELECT * FROM wishlist ORDER BY price"
+    )
+
+    transactions = query_df(
+        "SELECT * FROM transactions ORDER BY tx_date"
+    )
+
+    # MONEY OVERVIEW
+
+    st.header("💰 Your Money Overview")
+
+    a, b, c, d = st.columns(4)
+
+    a.metric("Available Money", money(available))
+    b.metric("Total Money", money(total))
+    c.metric("Total Savings", money(savings))
+    d.metric("Total Expenses", money(expenses))
+
+    st.caption(
+        "Available money excludes money already allocated to savings goals."
+    )
+
+    st.divider()
+
+    # SAVINGS ANALYSIS
+
+    st.header("🎯 Your Savings Goals")
+
+    if goals.empty:
+
+        st.info(
+            "You have no savings goals yet. "
+            "Create one in the Savings Goals section."
+        )
+
+    else:
+
+        goal_target = float(goals["target"].sum())
+        goal_saved = float(goals["saved"].sum())
+
+        a, b, c = st.columns(3)
+
+        a.metric("Total Goal Targets", money(goal_target))
+        b.metric("Saved So Far", money(goal_saved))
+        c.metric(
+            "Still Needed",
+            money(max(goal_target - goal_saved, 0))
+        )
+
+        chart_goals = goals[
+            ["name", "saved", "target"]
+        ].melt(
+            id_vars="name",
+            var_name="Measure",
+            value_name="Amount"
+        )
+
+        fig = px.bar(
+            chart_goals,
+            x="name",
+            y="Amount",
+            color="Measure",
+            barmode="group",
+            title="Your Savings Progress"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        for _, goal in goals.iterrows():
+
+            progress = min(
+                float(goal["saved"]) / float(goal["target"]), 1
+            )
+
+            st.write(
+                f"**{goal['name']}** — "
+                f"{money(goal['saved'])} / "
+                f"{money(goal['target'])}"
+            )
+
+            st.progress(progress)
+
+            if progress == 1:
+                st.success("Goal completed!")
+            elif progress >= 0.75:
+                st.info("You're getting close!")
+            elif progress >= 0.4:
+                st.write("You're making good progress.")
+            else:
+                st.write("Keep working toward this goal.")
+
+    st.divider()
+
+    # WISHLIST ANALYSIS
+
+    st.header("🛍️ Wishlist Affordability")
+
+    if wishlist.empty:
+
+        st.info("Add wishlist items to see your affordability analysis.")
+
+    else:
+
+        affordable = wishlist[
+            wishlist["price"] <= available
+        ]
+
+        w1, w2, w3 = st.columns(3)
+
+        w1.metric("Wishlist Items", len(wishlist))
+
+        w2.metric(
+            "Affordable Items",
+            f"{len(affordable)} / {len(wishlist)}"
+        )
+
+        w3.metric(
+            "Total Wishlist Cost",
+            money(wishlist["price"].sum())
+        )
+
+        for _, item in wishlist.iterrows():
+
+            price = float(item["price"])
+
+            if price <= available:
+
+                st.success(
+                    f"{item['name']} — {money(price)} — "
+                    "Fits your available balance."
+                )
+
+            else:
+
+                st.warning(
+                    f"{item['name']} — {money(price)} — "
+                    f"You need {money(price - available)} more."
+                )
+
+        st.info(
+            "Being able to afford something doesn't automatically "
+            "mean you should buy it. Think about your goals first."
+        )
+
+    st.divider()
+
+    # EXPENSE CHARTS
+
+    st.header("📊 Where Your Money Goes")
+
+    expense_data = (
+        transactions[transactions["kind"] == "Expense"].copy()
+        if not transactions.empty
+        else pd.DataFrame()
+    )
+
+    if expense_data.empty:
+
+        st.info("Record purchases to see your expense charts.")
+
+    else:
+
+        expense_data["tx_date"] = pd.to_datetime(
+            expense_data["tx_date"]
+        )
+
+        expense_data["Month"] = (
+            expense_data["tx_date"].dt.strftime("%B %Y")
+        )
+
+        category_data = (
+            expense_data.groupby("category")["amount"]
+            .sum()
+            .reset_index()
+        )
+
+        monthly_data = (
+            expense_data.groupby("Month")["amount"]
+            .sum()
+            .reset_index()
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            fig = px.pie(
+                category_data,
+                names="category",
+                values="amount",
+                hole=0.45,
+                title="Spending by Category"
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+
+            fig = px.bar(
+                monthly_data,
+                x="Month",
+                y="amount",
+                title="Monthly Expenses",
+                labels={"amount": "Money Spent ($)"}
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        daily = (
+            expense_data.groupby("tx_date")["amount"]
+            .sum()
+            .reset_index()
+            .sort_values("tx_date")
+        )
+
+        daily["Cumulative Spending"] = daily["amount"].cumsum()
+
+        fig = px.line(
+            daily,
+            x="tx_date",
+            y="Cumulative Spending",
+            markers=True,
+            title="Spending Over Time"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        biggest = category_data.sort_values(
+            "amount", ascending=False
+        ).iloc[0]
+
+        st.info(
+            f"Your biggest spending category is "
+            f"**{biggest['category']}**, with "
+            f"{money(biggest['amount'])} recorded."
+        )
+
+    st.divider()
+
+    # PERSONALIZED ADVICE
+
+    st.header("🧠 What Should You Do With Your Money?")
+
+    advice = []
+
+    if available < 0:
+
+        advice.append((
+            "Review your savings allocations",
+            "Your savings allocations are greater than your current "
+            "total money. Consider reducing contributions until "
+            "your available balance is positive."
+        ))
+
+    elif available < 25:
+
+        advice.append((
+            "Protect your remaining balance",
+            "You have less than $25 available. Consider postponing "
+            "optional purchases and keeping some money available."
+        ))
+
+    else:
+
+        advice.append((
+            "Plan before spending",
+            f"You have {money(available)} available. "
+            "Decide how much you want to keep for spending "
+            "and how much you want to save."
+        ))
+
+    if goals.empty:
+
+        advice.append((
+            "Create a savings goal",
+            "Choose something you want to save for and give "
+            "it a target amount."
+        ))
+
+    else:
+
+        unfinished = goals[
+            goals["saved"] < goals["target"]
+        ]
+
+        if unfinished.empty:
+
+            advice.append((
+                "Celebrate your progress",
+                "All your current savings goals have reached "
+                "their targets. Consider creating a new goal."
+            ))
+
+        else:
+
+            unfinished = unfinished.assign(
+                remaining=unfinished["target"] - unfinished["saved"]
+            )
+
+            closest = unfinished.sort_values(
+                "remaining"
+            ).iloc[0]
+
+            advice.append((
+                "Focus on your closest goal",
+                f"Your goal '{closest['name']}' needs "
+                f"{money(closest['remaining'])} more. "
+                "Consider making this your next savings priority."
+            ))
+
+    if wishlist.empty:
+
+        advice.append((
+            "Build a wishlist",
+            "Add things you want to buy so you can plan "
+            "for them instead of spending without a plan."
+        ))
+
+    else:
+
+        cheapest = wishlist.sort_values("price").iloc[0]
+
+        advice.append((
+            "Think before buying",
+            f"Your least expensive wishlist item is "
+            f"{cheapest['name']} at {money(cheapest['price'])}. "
+            "Check whether buying it would affect your savings plans."
+        ))
+
+    if income > 0 and expenses > income:
+
+        advice.append((
+            "Review your spending",
+            "Your recorded purchases are greater than your "
+            "recorded income. Review your transactions and "
+            "consider adjusting your spending plan."
+        ))
+
+    for index, (heading, message) in enumerate(advice, 1):
+
+        with st.container(border=True):
+
+            st.subheader(f"{index}. {heading}")
+            st.write(message)
+
+    st.divider()
+
+    # FUTURE SAVINGS CALCULATOR
+
+    st.header("🔮 Plan Your Future Savings")
+
+    st.write(
+        "Experiment with how much you could save over time. "
+        "This is a planning estimate, not a prediction."
+    )
+
+    weekly_amount = st.slider(
+        "How much could you save each week?",
+        min_value=0,
+        max_value=200,
+        value=20,
+        step=5
+    )
+
+    weeks = st.slider(
+        "How many weeks?",
+        min_value=1,
+        max_value=52,
+        value=12
+    )
+
+    additional_savings = weekly_amount * weeks
+    future_savings = savings + additional_savings
+
+    a, b, c = st.columns(3)
+
+    a.metric("Current Savings", money(savings))
+    b.metric("Additional Savings", money(additional_savings))
+    c.metric("Possible Future Savings", money(future_savings))
+
+    if not goals.empty and weekly_amount > 0:
+
+        unfinished = goals[
+            goals["saved"] < goals["target"]
+        ]
+
+        if not unfinished.empty:
+
+            unfinished = unfinished.assign(
+                remaining=unfinished["target"] - unfinished["saved"]
+            )
+
+            closest = unfinished.sort_values(
+                "remaining"
+            ).iloc[0]
+
+            weeks_needed = int(
+                (closest["remaining"] + weekly_amount - 0.000001)
+                // weekly_amount
+            )
+
+            st.success(
+                f"If you save {money(weekly_amount)} per week, "
+                f"you could reach '{closest['name']}' in about "
+                f"{weeks_needed} weeks."
+            )
+
+    st.caption(
+        "These suggestions are educational. You make the final "
+        "decision about how to use your money."
+    )
+
+
+# ==========================================
+# QUIZ
+# ==========================================
+
+elif page == "Quiz":
+
+    st.title("Money Knowledge Quiz")
+    st.write("Test what you know about budgeting and saving!")
+
+    questions = [
+        {
+            "question": "What is a budget?",
+            "options": [
+                "A plan for your money",
+                "A shopping list",
+                "A type of bank card"
+            ],
+            "answer": "A plan for your money"
+        },
+        {
+            "question": "What is an emergency fund?",
+            "options": [
+                "Money for unexpected expenses",
+                "Money for entertainment",
+                "Money you must spend"
+            ],
+            "answer": "Money for unexpected expenses"
+        },
+        {
+            "question": "What should you do before buying something expensive?",
+            "options": [
+                "Think about your budget and goals",
+                "Buy it immediately",
+                "Ignore the price"
+            ],
+            "answer": "Think about your budget and goals"
+        },
+        {
+            "question": "What happens when you save money?",
+            "options": [
+                "You set money aside for later",
+                "You lose track of it",
+                "You automatically spend it"
+            ],
+            "answer": "You set money aside for later"
+        }
+    ]
+
+    answers = []
+
+    for i, question in enumerate(questions):
+
+        st.subheader(f"Question {i + 1}")
+
+        answer = st.radio(
+            question["question"],
+            question["options"],
+            key=f"quiz_{i}"
+        )
+
+        answers.append(answer)
+
+    if st.button("Check My Answers"):
+
+        score = sum(
+            answers[i] == questions[i]["answer"]
+            for i in range(len(questions))
+        )
+
+        st.metric("Your Score", f"{score} / {len(questions)}")
+
+        if score == len(questions):
+            st.success("Perfect score! Great job!")
+        elif score >= 2:
+            st.info("Good work! Keep learning.")
+        else:
+            st.info("Keep practicing. You'll get there!")
+
+
+# ==========================================
+# LEARNING CENTER
+# ==========================================
+
+elif page == "Learning Center":
+
+    st.title("Learning Center")
+
+    st.write("Build your money knowledge.")
+
+    with st.expander("💡 Needs vs. Wants"):
+
+        st.write(
+            "A need is something important for everyday life. "
+            "A want is something you would like but do not "
+            "necessarily need."
+        )
+
+    with st.expander("💰 How to Save Money"):
+
+        st.write(
+            "Choose a realistic amount to save regularly. "
+            "Small amounts can add up over time."
+        )
+
+    with st.expander("📊 What Is a Budget?"):
+
+        st.write(
+            "A budget is a plan for how you will use your money. "
+            "It helps you balance spending and saving."
+        )
+
+    with st.expander("🛍️ Smart Shopping"):
+
+        st.write(
+            "Before buying something, compare prices, consider "
+            "whether you need it, and think about your savings goals."
+        )
+
+    with st.expander("🎯 Setting Financial Goals"):
+
+        st.write(
+            "A financial goal gives your saving a purpose. "
+            "Choose a target amount and track your progress."
+        )
+
+
+# ==========================================
+# SETTINGS
+# ==========================================
+
+elif page == "Settings":
+
+    st.title("Settings")
+
+    st.subheader("Choose Your Starting Balance")
+
+    st.write(
+        "Choose how much pretend money you want to start with. "
+        "This is a practice balance, not a real bank account."
+    )
+
+    current_balance = get_starting_balance()
+
+    with st.form("starting_balance_form"):
+
+        starting = st.number_input(
+            "Starting Money ($)",
+            min_value=0.0,
+            value=float(current_balance),
+            step=10.0
+        )
+
+        if st.form_submit_button("Save Starting Balance"):
+
+            save_starting_balance(starting)
+
+            st.success("Starting balance saved!")
+            st.rerun()
+
+    st.divider()
+
+    st.subheader("How Your Balance Works")
+
+    st.write("""
+    - Starting balance: your chosen starting amount.
+    - Income: adds money to your total.
+    - Purchases: subtract money from your total.
+    - Savings contributions: move money into your savings goals.
+    - Wishlist items: do not affect your balance until you buy them.
+    """)
+
+    st.warning(
+        "Your information is stored in common_cents.db in your project "
+        "folder. Keep this file to preserve your practice data. "
+        "Avoid entering real banking details or private financial information."
+    )
+
+
+# ==========================================
+# FOOTER
+# ==========================================
+
+st.divider()
+
+st.caption(
+    "🪙 Common Cents | Educational Budgeting Simulator | "
+    "Make Every Cent Count."
+)
