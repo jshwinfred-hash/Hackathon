@@ -1,1 +1,54 @@
+Common Cents – Personal Money Coach (Insights Page)
+The Insights Page in Common Cents is designed to act as a personal money coach, helping users understand their financial situation, manage their spending, track savings goals, and make smarter decisions about their money. It brings all important financial information together in one place and provides personalized suggestions based on the user's income, expenses, savings, transactions, and wishlist.
 
+The page includes several important features:
+1. Money Overview
+This section provides a quick summary of the user's financial situation. It displays four key measurements:
+- Available Money: The amount of money remaining after purchases and savings contributions.
+- Total Money: The user's overall recorded balance.
+- Total Savings: The amount of money currently saved.
+- Total Expenses: The total amount spent.
+This overview helps users understand how much money they have and how they are managing it.
+2. Savings Goals
+This section allows users to monitor their progress toward their financial goals. It displays the total amount they want to save, how much they have already saved, and how much they still need.
+
+Each savings goal has its own progress bar and personalized message depending on how close the user is to reaching the target. This encourages users to stay motivated, continue saving, and work toward achieving their financial goals.
+3. Wishlist
+The Wishlist section helps users plan future purchases without spending money impulsively. It displays all the items users want to buy, their prices, and whether they can currently afford them based on their available balance.
+
+Items that fit the available balance are marked as affordable, while items that cost more show how much additional money is needed. It also reminds users to consider their savings goals before making purchases.
+4. Spending Analysis
+This section helps users understand where their money goes by analyzing their recorded expenses.
+
+It includes two visual charts:
+- Spending by Category: A pie chart showing how expenses are divided among different spending categories.
+- Monthly Spending: A bar chart showing how much money the user spends each month.
+It also identifies the user's biggest spending category and provides suggestions for reviewing expenses and finding opportunities to reduce unnecessary spending.
+5. Personalized Financial Advice
+This section provides recommendations based on the user's financial activity and current situation.
+
+The advice can include:
+- Reviewing savings contributions if available money becomes negative.
+- Protecting the remaining balance when available money is low.
+- Planning how to divide available money between spending and saving.
+- Focusing on unfinished savings goals.
+- Creating new savings goals.
+- Thinking carefully before purchasing wishlist items.
+- Reviewing spending when expenses are higher than income.
+These recommendations help users become more aware of their financial habits and make more responsible decisions.
+6. Future Savings Calculator
+The Future Savings Calculator allows users to experiment with different savings amounts and time periods to estimate how much they could save in the future.
+
+Users can adjust two sliders:
+- Weekly Savings: How much money they plan to save each week.
+- Number of Weeks: How long they plan to continue saving.
+The calculator automatically estimates additional savings and combines that amount with current savings to show possible future savings. If the user has an unfinished savings goal, it can also estimate approximately how many weeks it would take to reach that goal.
+
+This feature helps users create realistic savings plans and understand how small, consistent contributions can add up over time.
+7. Educational Financial Guidance
+At the bottom of the page, Common Cents reminds users that its recommendations are educational suggestions. The purpose is to help users understand their finances and explore better money-management habits while allowing them to make their own financial decisions.
+
+Overall Purpose
+The main purpose of the Common Cents Insights Page is to make money management easier, more understandable, and more engaging. Instead of simply showing numbers, it transforms financial information into useful insights, progress updates, charts, and personalized recommendations.
+
+By combining money tracking, savings goals, wishlist planning, spending analysis, financial advice, and a future savings calculator, the Insights Page encourages users to develop healthy financial habits, avoid unnecessary spending, save consistently, and become more confident in managing their money.
